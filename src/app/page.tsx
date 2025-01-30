@@ -18,13 +18,14 @@ interface RateLimit {
 }
 
 export default function Home() {
-  const diagramRef = useRef<HTMLDivElement>(null);
   const [repoUrl, setRepoUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [diagramData, setDiagramData] = useState<DiagramData | null>(null)
   const [rateLimit, setRateLimit] = useState<RateLimit | null>(null)
   const [diagram, setDiagram] = useState<string>('')
+  const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set())
+  const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(new Set())
   const [filters, setFilters] = useState<FilterState>({
     showComponents: true,
     showHooks: true,
@@ -79,7 +80,7 @@ export default function Home() {
       for (const [alias, paths] of Object.entries(pathAliases)) {
         const aliasPattern = alias.replace('*', '(.*)');
         const match = normalizedPath.match(new RegExp(`^${aliasPattern}$`));
-        
+
         if (match) {
           const [, rest] = match;
           // Use the first path mapping (most common case)
@@ -88,7 +89,7 @@ export default function Home() {
           return replacement.replace(/^\.\//, '');
         }
       }
-      
+
       return normalizedPath;
     };
 
@@ -101,20 +102,20 @@ export default function Home() {
         // Handle relative imports
         if (imp.source.startsWith('.')) {
           resolvedPath = resolveImportPath(node.path, imp.source);
-        } 
+        }
         // Handle alias imports
         else if (imp.source.startsWith('@/')) {
           resolvedPath = resolveAliasPath(imp.source);
         }
 
         console.log('Resolved path:', resolvedPath);
-        
+
         // Find the matching node
         const targetNode = Array.from(nodesByPath.entries()).find(([path]) => {
           const normalizedPath = path.replace(/\.(ts|tsx|js|jsx)$/, '');
           const normalizedResolved = resolvedPath.replace(/\.(ts|tsx|js|jsx)$/, '');
-          return normalizedPath.endsWith(normalizedResolved) || 
-                 normalizedResolved.endsWith(normalizedPath);
+          return normalizedPath.endsWith(normalizedResolved) ||
+            normalizedResolved.endsWith(normalizedPath);
         });
 
         if (targetNode) {
@@ -192,7 +193,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setDiagram(''); // Clear previous diagram
-    
+
     try {
       console.log('Starting repository analysis');
       const limit = await checkRateLimit();
@@ -223,7 +224,7 @@ export default function Home() {
       };
 
       setDiagramData(data);
-      const newDiagram = generateMermaidDiagram(data, filters);
+      const newDiagram = generateMermaidDiagram(data, filters, highlightedNodes, highlightedEdges);
       console.log('Setting new diagram');
       setDiagram(newDiagram);
     } catch (error) {
@@ -234,16 +235,29 @@ export default function Home() {
     }
   };
 
-  const handleFilterChange = (newFilters: FilterState) => {
+  useEffect(() => {
+    if (diagramData) {
+      const newDiagram = generateMermaidDiagram(diagramData, filters, highlightedNodes, highlightedEdges);
+      console.log('Setting new diagram');
+      setDiagram(newDiagram);
+    }
+  }, [highlightedNodes, highlightedEdges]);
+
+  const handleFiltersChange = (newFilters: FilterState) => {
     setFilters(newFilters);
     if (diagramData) {
-      const newDiagram = generateMermaidDiagram(diagramData, newFilters);
+      const newDiagram = generateMermaidDiagram(
+        diagramData, 
+        newFilters,
+        highlightedNodes,
+        highlightedEdges
+      );
       setDiagram(newDiagram);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 w-full h-full">
       <h1 className="text-4xl font-bold">GitHub Dependency Visualizer</h1>
 
       {rateLimit && (
@@ -284,7 +298,10 @@ export default function Home() {
         diagram={diagram}
         nodes={diagramData?.nodes || []}
         edges={diagramData?.edges || []}
-        onFilterChange={handleFilterChange}
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+        setHighlightedNodes={setHighlightedNodes}
+        setHighlightedEdges={setHighlightedEdges}
       />
     </div>
   )
