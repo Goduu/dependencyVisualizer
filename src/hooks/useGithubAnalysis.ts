@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { parseRepoUrl, getRepoFiles, checkRateLimit } from '@/src/services/github'
+import { parseRepoUrl, getRepoFiles, checkRateLimit, getTsConfig } from '@/src/services/github'
 import { parseTypeScript, shouldParseFile } from '@/src/services/parser'
 import { DiagramData, FileNode } from '@/src/types'
 
@@ -15,6 +15,7 @@ export function useGithubAnalysis() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [rateLimit, setRateLimit] = useState<RateLimit | null>(null)
+    const [pathAliases, setPathAliases] = useState<Record<string, string[]>>({});
 
     const resolveImportPath = (currentPath: string, importPath: string): string => {
         console.log('currentPath', currentPath)
@@ -44,29 +45,16 @@ export function useGithubAnalysis() {
         const edges: DiagramData['edges'] = [];
         const nodesByPath = new Map(nodes.map(node => [node.path, node]));
 
-        // Get path aliases from tsconfig
-        const pathAliases = {
-            '@/*': ['./*'],
-            '@/src/*': ['./src/*'],
-            '@/components/*': ['./src/components/*'],
-            '@/types/*': ['./src/types/*'],
-            '@/services/*': ['./src/services/*']
-        };
-
         const resolveAliasPath = (importPath: string): string => {
-            // Remove file extensions
             const normalizedPath = importPath.replace(/\.(ts|tsx|js|jsx)$/, '');
 
-            // Check each alias
             for (const [alias, paths] of Object.entries(pathAliases)) {
                 const aliasPattern = alias.replace('*', '(.*)');
                 const match = normalizedPath.match(new RegExp(`^${aliasPattern}$`));
 
                 if (match) {
                     const [, rest] = match;
-                    // Use the first path mapping (most common case)
                     const replacement = paths[0].replace('*', rest);
-                    // Remove './' prefix and normalize slashes
                     return replacement.replace(/^\.\//, '');
                 }
             }
@@ -75,23 +63,19 @@ export function useGithubAnalysis() {
         };
 
         nodes.forEach(node => {
-            // Handle import dependencies
             node.imports.forEach(imp => {
                 let resolvedPath = imp.source;
                 console.log('Processing import:', { from: node.path, import: imp.source });
 
-                // Handle relative imports
                 if (imp.source.startsWith('.')) {
                     resolvedPath = resolveImportPath(node.path, imp.source);
                 }
-                // Handle alias imports
                 else if (imp.source.startsWith('@/')) {
                     resolvedPath = resolveAliasPath(imp.source);
                 }
 
                 console.log('Resolved path:', resolvedPath);
 
-                // Find the matching node
                 const targetNode = Array.from(nodesByPath.entries()).find(([path]) => {
                     const normalizedPath = path.replace(/\.(ts|tsx|js|jsx)$/, '');
                     const normalizedResolved = resolvedPath.replace(/\.(ts|tsx|js|jsx)$/, '');
@@ -109,7 +93,6 @@ export function useGithubAnalysis() {
                 }
             });
 
-            // Handle hook dependencies
             node.hooks?.forEach(hook => {
                 hook.dependencies.forEach(dep => {
                     const depNode = nodes.find(n =>
@@ -126,7 +109,6 @@ export function useGithubAnalysis() {
                 });
             });
 
-            // Handle HOC relationships
             node.hocs?.forEach(hoc => {
                 const hocNode = nodes.find(n =>
                     n.exports.functions.includes(hoc) ||
@@ -137,6 +119,22 @@ export function useGithubAnalysis() {
                         from: hocNode.path,
                         to: node.path,
                         type: 'hoc'
+                    });
+                }
+            });
+
+            node.props?.forEach(prop => {
+                const targetNode = nodes.find(n => 
+                    n.exports.components.includes(prop.to)
+                );
+
+                if (targetNode) {
+                    edges.push({
+                        from: node.path,
+                        to: targetNode.path,
+                        type: 'prop',
+                        label: `${prop.from} → ${prop.to}: ${prop.propName}`,
+                        name: prop.propName
                     });
                 }
             });
@@ -160,6 +158,11 @@ export function useGithubAnalysis() {
             }
 
             const { owner, repo } = parseRepoUrl(repoUrl)
+            const configPaths = await getTsConfig(owner, repo);
+            if (configPaths) {
+                setPathAliases(configPaths);
+            }
+
             const files = await getRepoFiles(owner, repo)
 
             const parsedNodes = files

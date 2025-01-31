@@ -14,15 +14,23 @@ export interface FileNode {
     dependencies: string[];
   }[];
   hocs?: string[];
-}
-
-export interface DiagramData {
-  nodes: FileNode[];
-  edges: {
+  props?: {
     from: string;
     to: string;
-    type: 'import' | 'prop' | 'hook-dependency' | 'hoc';
+    propName: string;
   }[];
+}
+
+interface DiagramEdge {
+  from: string;
+  to: string;
+  type: 'import' | 'prop' | 'hook-dependency' | 'hoc';
+  label?: string;  // Add this
+  name?: string;
+}
+export interface DiagramData {
+  nodes: FileNode[];
+  edges: DiagramEdge[];
 }
 
 export interface SearchOptions {

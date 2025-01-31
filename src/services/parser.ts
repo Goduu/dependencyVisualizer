@@ -9,6 +9,11 @@ interface ReactHook {
 interface ParsedNode extends FileNode {
   hooks: ReactHook[];
   hocs: string[];
+  props: {
+    from: string;  // Component passing the prop
+    to: string;    // Component receiving the prop
+    propName: string;
+  }[];
 }
 
 interface NodeWithExports {
@@ -24,6 +29,69 @@ interface NodeWithExports {
   }[];
   hooks: ReactHook[];
   hocs: string[];
+  props: {
+    from: string;
+    to: string;
+    propName: string;
+  }[];
+}
+
+function getNodeName(node: ts.Node): string | undefined {
+  if (ts.isIdentifier(node)) {
+    return node.text;
+  }
+  if ('name' in node && ts.isIdentifier((node as any).name)) {
+    return (node as any).name.text;
+  }
+  return undefined;
+}
+
+const parseProps = (node: ts.Node): Array<{ from: string; to: string; propName: string }> => {
+  const props: Array<{ from: string; to: string; propName: string }> = [];
+
+  // Look for JSX elements with props
+  if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+    const tagName = ts.isJsxElement(node)
+      ? node.openingElement.tagName.getText()
+      : node.tagName.getText();
+
+    // Only track props for component references (starting with uppercase)
+    if (/^[A-Z]/.test(tagName)) {
+      const attributes = ts.isJsxElement(node)
+        ? node.openingElement.attributes.properties
+        : node.attributes.properties;
+
+      // Get the containing function/component name
+      let parentComponent = '';
+      let current: ts.Node | undefined = node;
+      while (current) {
+        if (ts.isFunctionDeclaration(current) || ts.isArrowFunction(current)) {
+          parentComponent = getNodeName(current) || '';
+          break;
+        }
+        current = current.parent;
+      }
+
+      if (parentComponent) {
+        attributes.forEach(attr => {
+          if (ts.isJsxAttribute(attr) && attr.name) {
+            props.push({
+              from: parentComponent,
+              to: tagName,
+              propName: attr.name.getText()
+            });
+          }
+        });
+      }
+    }
+  }
+
+  // Recursively check children
+  node.forEachChild(child => {
+    props.push(...parseProps(child));
+  });
+
+  return props;
 }
 
 export const parseTypeScript = (fileContent: string, filePath: string): ParsedNode => {
@@ -44,6 +112,7 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
     imports: [],
     hooks: [],
     hocs: [],
+    props: [],
   }
 
   function isReactComponent(node: ts.Node): boolean {
@@ -51,7 +120,7 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
     if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node)) {
       const body = ts.isFunctionDeclaration(node) ? node.body : node;
       if (!body) return false;
-      
+
       let containsJsx = false;
       const visitJsx = (node: ts.Node) => {
         if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
@@ -59,7 +128,7 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
         }
         ts.forEachChild(node, visitJsx);
       };
-      
+
       ts.forEachChild(body, visitJsx);
       return containsJsx;
     }
@@ -80,10 +149,10 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
       const params = node.parameters;
       return params.some(param => {
         const type = param.type;
-        return type && ts.isTypeReferenceNode(type) && 
-          (type.typeName.getText() === 'ComponentType' || 
-           type.typeName.getText() === 'FC' ||
-           type.typeName.getText() === 'FunctionComponent');
+        return type && ts.isTypeReferenceNode(type) &&
+          (type.typeName.getText() === 'ComponentType' ||
+            type.typeName.getText() === 'FC' ||
+            type.typeName.getText() === 'FunctionComponent');
       });
     }
     return false;
@@ -91,12 +160,12 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
 
   function getHookDependencies(node: ts.Node): string[] {
     const dependencies: string[] = [];
-    
+
     // Look for useEffect/useMemo/useCallback dependency arrays
     ts.forEachChild(node, child => {
-      if (ts.isCallExpression(child) && 
-          ts.isIdentifier(child.expression) && 
-          ['useEffect', 'useMemo', 'useCallback'].includes(child.expression.text)) {
+      if (ts.isCallExpression(child) &&
+        ts.isIdentifier(child.expression) &&
+        ['useEffect', 'useMemo', 'useCallback'].includes(child.expression.text)) {
         const lastArg = child.arguments[child.arguments.length - 1];
         if (ts.isArrayLiteralExpression(lastArg)) {
           lastArg.elements.forEach(element => {
@@ -109,16 +178,6 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
     });
 
     return dependencies;
-  }
-
-  function getNodeName(node: ts.Node): string | undefined {
-    if (ts.isIdentifier(node)) {
-      return node.text;
-    }
-    if ('name' in node && ts.isIdentifier((node as any).name)) {
-      return (node as any).name.text;
-    }
-    return undefined;
   }
 
   function visit(node: ts.Node) {
@@ -212,6 +271,10 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
       }
     }
 
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      parsedNode.props.push(...parseProps(node));
+    }
+
     ts.forEachChild(node, visit);
   }
 
@@ -230,10 +293,10 @@ export const parseTypeScript = (fileContent: string, filePath: string): ParsedNo
 export const shouldParseFile = (filePath: string): boolean => {
   const validExtensions = ['.ts', '.tsx', '.js', '.jsx'];
   const invalidPaths = ['node_modules', 'dist', 'build', '.next'];
-  
+
   const extension = filePath.slice(filePath.lastIndexOf('.'));
   const isValidExtension = validExtensions.includes(extension);
   const isValidPath = !invalidPaths.some(path => filePath.includes(path));
-  
+
   return isValidExtension && isValidPath;
 } 

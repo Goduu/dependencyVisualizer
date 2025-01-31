@@ -106,4 +106,47 @@ export const checkRateLimit = async (): Promise<{
     resetTime: new Date(data.rate.reset * 1000),
     authenticated: isAuthenticated
   }
+}
+
+export async function getTsConfig(owner: string, repo: string): Promise<Record<string, string[]> | null> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/tsconfig.json`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+          Accept: 'application/vnd.github.v3.raw',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log('No tsconfig.json found');
+        return null;
+      }
+      throw new Error(`Failed to fetch tsconfig.json: ${response.statusText}`);
+    }
+
+    const tsConfig = await response.json();
+    
+    // Extract path mappings from compilerOptions
+    const paths = tsConfig.compilerOptions?.paths || {};
+    
+    // Convert paths to our format
+    const normalizedPaths: Record<string, string[]> = {};
+    Object.entries(paths).forEach(([alias, targets]) => {
+      // Ensure targets is an array
+      const pathTargets = Array.isArray(targets) ? targets : [targets];
+      // Remove ./* from the beginning of each target
+      normalizedPaths[alias] = pathTargets.map(target => 
+        target.replace(/^\.\//, '')
+      );
+    });
+
+    return normalizedPaths;
+  } catch (error) {
+    console.error('Error fetching tsconfig.json:', error);
+    return null;
+  }
 } 

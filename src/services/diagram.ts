@@ -22,12 +22,12 @@ interface FilterState {
 }
 
 // Edge style definitions
-const getEdgeStyle = (type: string): string => {
+const getEdgeStyle = (type: string, name?: string): string => {
   switch (type) {
     case 'import':
       return ' -->|import| ';
     case 'prop':
-      return ' ==>|props| ';
+      return ` ==>|p:${name}| `;
     case 'hook-dependency':
       return ' -.->|hook| ';
     case 'hoc':
@@ -209,7 +209,7 @@ export const generateMermaidDiagram = (
 
     // Process edges
     if (data.edges) {
-      let linkStyleIndex = 0;  // Add this line
+      let linkStyleIndex = 0;
       data.edges.forEach(edge => {
         const fromId = sanitizeId(edge.from);
         const toId = sanitizeId(edge.to);
@@ -218,7 +218,7 @@ export const generateMermaidDiagram = (
           const isHighlighted = highlightedEdges?.has(`${edge.from}-${edge.to}`);
           const edgeStyle = isHighlighted ? 
             ' ===> ' : 
-            getEdgeStyle(edge.type);
+            getEdgeStyle(edge.type, edge.name);
 
           if (
             (filters.showImports && edge.type === 'import') ||
