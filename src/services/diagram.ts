@@ -40,7 +40,7 @@ const getEdgeStyle = (type: string): string => {
 const getEdgeStyleProperties = (type: string): string => {
   switch (type) {
     case 'import':
-      return 'stroke:#666,stroke-width:1px,stroke-dasharray:0';
+      return 'stroke:#666,stroke-width:1.5px,stroke-dasharray:0';
     case 'prop':
       return 'stroke:#f66,stroke-width:2px';
     case 'hook-dependency':
@@ -79,35 +79,35 @@ function matchesSearch(text: string | undefined, search: SearchOptions): boolean
 }
 
 // Check for circular dependencies
-function detectCircularDependencies(edges: Array<{ from: string; to: string }>): boolean {
-  const graph = new Map<string, Set<string>>()
+// function detectCircularDependencies(edges: Array<{ from: string; to: string }>): boolean {
+//   const graph = new Map<string, Set<string>>()
   
-  edges.forEach(({ from, to }) => {
-    if (!graph.has(from)) graph.set(from, new Set())
-    graph.get(from)!.add(to)
-  })
+//   edges.forEach(({ from, to }) => {
+//     if (!graph.has(from)) graph.set(from, new Set())
+//     graph.get(from)!.add(to)
+//   })
 
-  const visited = new Set<string>()
-  const recursionStack = new Set<string>()
+//   const visited = new Set<string>()
+//   const recursionStack = new Set<string>()
 
-  function hasCycle(node: string): boolean {
-    if (!graph.has(node)) return false
-    if (recursionStack.has(node)) return true
-    if (visited.has(node)) return false
+//   function hasCycle(node: string): boolean {
+//     if (!graph.has(node)) return false
+//     if (recursionStack.has(node)) return true
+//     if (visited.has(node)) return false
 
-    visited.add(node)
-    recursionStack.add(node)
+//     visited.add(node)
+//     recursionStack.add(node)
 
-    for (const neighbor of Array.from(graph.get(node)!)) {
-      if (hasCycle(neighbor)) return true
-    }
+//     for (const neighbor of Array.from(graph.get(node)!)) {
+//       if (hasCycle(neighbor)) return true
+//     }
 
-    recursionStack.delete(node)
-    return false
-  }
+//     recursionStack.delete(node)
+//     return false
+//   }
 
-  return Array.from(graph.keys()).some(node => hasCycle(node))
-}
+//   return Array.from(graph.keys()).some(node => hasCycle(node))
+// }
 
 // Safe HTML content generation
 function generateNodeContent(node: FileNode): string {
@@ -149,12 +149,13 @@ export const generateMermaidDiagram = (
 
     // Add styles
     diagram += `
-      classDef default fill:#fff,stroke:#333,stroke-width:1px;
-      classDef component fill:#f9f,stroke:#333,stroke-width:2px;
-      classDef hook fill:#bbf,stroke:#333,stroke-width:2px;
-      classDef hoc fill:#ffb,stroke:#333,stroke-width:2px;
-      classDef highlight fill:#ff0,stroke:#f00,stroke-width:3px;
-      classDef dimmed fill:#eee,stroke:#999,stroke-width:1px;
+      %% Base styles
+      classDef default fill:#fff,stroke-width:1px,rx:8,ry:8;
+      classDef component fill:#f97316,stroke-width:2px,color:#fff,rx:8,ry:8;
+      classDef hook fill:#8b5cf6,stroke-width:2px,color:#fff,rx:8,ry:8;
+      classDef hoc fill:#ffb,stroke-width:2px,rx:8,ry:8;
+      classDef highlight fill:#EAB308,stroke:#a16207,stroke-width:3px,rx:8,ry:8;
+      classDef dimmed fill:#eee,stroke:#999,stroke-width:1px,rx:8,ry:8;
     `.replace(/^\s+/gm, '  ');
 
     // Filter nodes based on search and filters
@@ -215,7 +216,7 @@ export const generateMermaidDiagram = (
         
         if (nodeIds.has(fromId) && nodeIds.has(toId)) {
           const isHighlighted = highlightedEdges?.has(`${edge.from}-${edge.to}`);
-          let edgeStyle = isHighlighted ? 
+          const edgeStyle = isHighlighted ? 
             ' ===> ' : 
             getEdgeStyle(edge.type);
 
@@ -225,7 +226,7 @@ export const generateMermaidDiagram = (
             (filters.showHookDeps && edge.type === 'hook-dependency')
           ) {
             const style = isHighlighted ? 
-              'stroke:#f00,stroke-width:2px' : 
+              'stroke:#EAB308,stroke-width:2.5px' : 
               getEdgeStyleProperties(edge.type);
             
             diagram += `  ${fromId}${edgeStyle}${toId}\n`;

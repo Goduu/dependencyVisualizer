@@ -98,7 +98,11 @@ const MermaidRenderer = ({
       {/* Diagram Container */}
       <div 
         ref={containerRef}
-        className="w-full h-[calc(100vh-200px)] border rounded-lg p-4 overflow-hidden"
+        className="w-full h-[calc(100vh-200px)] border rounded-lg p-4 overflow-hidden 
+          [&_g]:hover:cursor-pointer 
+          [&_.node]:transition-all [&_.node]:duration-300 hover:[&_.node]:opacity-80
+          [&_.edgePaths]:transition-all [&_.edgePaths]:duration-300 hover:[&_.edgePaths]:opacity-80  hover:[&_.edgePaths]:shadow-sm hover:[&_.edgePaths]:stroke-red-500
+          [&_path]:transition-all [&_path]:duration-300 hover:[&_path]:stroke-2 hover:[&_path]:stroke-red-500"
       />
     </div>
   );
